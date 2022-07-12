@@ -1,6 +1,5 @@
 <template>
   <el-dialog
-    title="替换规则管理"
     :visible.sync="show"
     :width="dialogWidth"
     :top="dialogTop"
@@ -13,7 +12,7 @@
   >
     <div class="custom-dialog-title" slot="title">
       <span class="el-dialog__title"
-        >替换规则管理
+        >{{ this.book ? this.book.name : "" }} 书签管理
         <span class="float-right span-btn" @click="uploadFile">导入</span>
         <input
           ref="fileRef"
@@ -25,7 +24,7 @@
     </div>
     <div class="source-container table-container">
       <el-table
-        :data="$store.state.filterRules"
+        :data="bookmarkList"
         :height="dialogContentHeight"
         @selection-change="localSelection = $event"
       >
@@ -36,30 +35,26 @@
         >
         </el-table-column>
         <el-table-column
-          property="name"
           min-width="150px"
-          label="规则名称"
+          label="书籍"
           :fixed="$store.state.miniInterface"
         >
-        </el-table-column>
-        <el-table-column property="scope" label="替换范围" min-width="150px">
-        </el-table-column>
-        <el-table-column property="isEnabled" label="是否启用" min-width="80">
           <template slot-scope="scope">
-            <el-switch
-              v-model="scope.row.isEnabled"
-              active-color="#13ce66"
-              inactive-color="#ff4949"
-              :active-value="true"
-              :inactive-value="false"
-              @change="toggleRuleEnabled(scope.row, $event)"
-            >
-            </el-switch>
+            {{ scope.row.bookName }} - {{ scope.row.bookAuthor }}
           </template>
+        </el-table-column>
+        <el-table-column property="chapterName" label="章节" min-width="150px">
+        </el-table-column>
+        <el-table-column property="bookText" label="内容" min-width="150px">
+        </el-table-column>
+        <el-table-column property="content" label="备注" min-width="150px">
         </el-table-column>
         <el-table-column label="操作" width="100px">
           <template slot-scope="scope">
-            <el-button type="text" @click="editReplaceRule(scope.row)"
+            <el-button type="text" @click="showBookmark(scope.row)"
+              >跳转</el-button
+            >
+            <el-button type="text" @click="editBookmark(scope.row)"
               >编辑</el-button
             >
           </template>
@@ -71,7 +66,7 @@
         type="primary"
         size="medium"
         class="float-left"
-        @click="deleteReplaceRules"
+        @click="deleteBookmarks"
         >批量删除</el-button
       >
       <span class="check-tip">已选择 {{ localSelection.length }} 个</span>
@@ -90,16 +85,24 @@ export default {
     prop: "show",
     event: "setShow"
   },
-  name: "ReplaceRule",
+  name: "Bookmark",
   data() {
     return {
       localSelection: []
     };
   },
   computed: {
-    ...mapGetters(["dialogWidth", "dialogTop", "dialogContentHeight"])
+    ...mapGetters(["dialogWidth", "dialogTop", "dialogContentHeight"]),
+    bookmarkList() {
+      if (!this.book || !this.book.name) {
+        return this.$store.state.bookmarks;
+      }
+      return this.$store.state.bookmarks.filter(
+        v => v.bookName === this.book.name && v.bookAuthor === this.book.author
+      );
+    }
   },
-  props: ["show"],
+  props: ["show", "book"],
   watch: {
     show(isVisible) {
       if (isVisible) {
@@ -117,12 +120,12 @@ export default {
     cancel() {
       this.$emit("setShow", false);
     },
-    async deleteReplaceRules() {
+    async deleteBookmarks() {
       if (!this.localSelection.length) {
-        this.$message.error("请选择需要删除的替换规则");
+        this.$message.error("请选择需要删除的书签");
         return;
       }
-      const res = await this.$confirm("确认要删除所选择的替换规则吗?", "提示", {
+      const res = await this.$confirm("确认要删除所选择的书签吗?", "提示", {
         confirmButtonText: "确定",
         cancelButtonText: "取消",
         type: "warning"
@@ -132,36 +135,21 @@ export default {
       if (!res) {
         return;
       }
-      Axios.post(this.api + "/deleteReplaceRules", this.localSelection).then(
+      Axios.post(this.api + "/deleteBookmarks", this.localSelection).then(
         res => {
           if (res.data.isSuccess) {
             this.localSelection = [];
-            this.$message.success("删除替换规则成功");
-            this.$root.$children[0].loadReplaceRules(true);
+            this.$message.success("删除书签成功");
+            this.$root.$children[0].loadBookmarks(true);
           }
         },
         error => {
-          this.$message.error(
-            "删除替换规则失败 " + (error && error.toString())
-          );
+          this.$message.error("删除书签失败 " + (error && error.toString()));
         }
       );
     },
-    toggleRuleEnabled(rule, isEnabled) {
-      Axios.post("/saveReplaceRule", { ...rule, isEnabled }).then(
-        res => {
-          if (res.data.isSuccess) {
-            this.$message.success("修改成功");
-            this.$root.$children[0].loadReplaceRules(true);
-          }
-        },
-        error => {
-          this.$message.error("修改失败 " + (error && error.toString()));
-        }
-      );
-    },
-    editReplaceRule(row) {
-      eventBus.$emit("showReplaceRuleForm", { ...row }, false);
+    editBookmark(row) {
+      eventBus.$emit("showBookmarkForm", { ...row }, false);
     },
     uploadFile() {
       this.$refs.fileRef.dispatchEvent(new MouseEvent("click"));
@@ -173,12 +161,12 @@ export default {
       reader.onload = e => {
         const data = e.target.result;
         try {
-          const ruleList = JSON.parse(data);
-          if (Array.isArray(ruleList) && ruleList.length) {
-            this.comfirmImport(ruleList);
+          const bookmarkList = JSON.parse(data);
+          if (Array.isArray(bookmarkList) && bookmarkList.length) {
+            this.comfirmImport(bookmarkList);
           }
         } catch (error) {
-          this.$message.error("替换规则文件错误");
+          this.$message.error("书签文件错误");
         }
       };
       reader.onerror = () => {
@@ -192,27 +180,27 @@ export default {
           res => {
             if (res.data.isSuccess) {
               //
-              let ruleList = [];
+              let bookmarkList = [];
               res.data.data.forEach(v => {
                 try {
                   const data = JSON.parse(v);
                   if (Array.isArray(data)) {
-                    ruleList = ruleList.concat(data);
+                    bookmarkList = bookmarkList.concat(data);
                   }
                 } catch (error) {
                   //
                 }
               });
-              if (ruleList.length) {
-                this.comfirmImport(ruleList);
+              if (bookmarkList.length) {
+                this.comfirmImport(bookmarkList);
               } else {
-                this.$message.error("替换规则文件错误");
+                this.$message.error("书签文件错误");
               }
             }
           },
           error => {
             this.$message.error(
-              "读取替换规则文件内容失败 " + (error && error.toString())
+              "读取书签文件内容失败 " + (error && error.toString())
             );
           }
         );
@@ -220,9 +208,9 @@ export default {
       reader.readAsText(rawFile);
       this.$refs.fileRef.value = null;
     },
-    async comfirmImport(ruleList) {
+    async comfirmImport(bookmarkList) {
       const res = await this.$confirm(
-        `确认要导入文件中的${ruleList.length}条替换规则吗?`,
+        `确认要导入文件中的${bookmarkList.length}条书签吗?`,
         "提示",
         {
           confirmButtonText: "确定",
@@ -235,19 +223,21 @@ export default {
       if (!res) {
         return;
       }
-      Axios.post(this.api + "/saveReplaceRules", ruleList).then(
+      Axios.post(this.api + "/saveBookmarks", bookmarkList).then(
         res => {
           if (res.data.isSuccess) {
-            this.$message.success("导入替换规则成功");
-            this.$root.$children[0].loadReplaceRules(true);
+            this.$message.success("导入书签成功");
+            this.$root.$children[0].loadBookmarks(true);
           }
         },
         error => {
-          this.$message.error(
-            "导入替换规则失败 " + (error && error.toString())
-          );
+          this.$message.error("导入书签失败 " + (error && error.toString()));
         }
       );
+    },
+    showBookmark(bookmark) {
+      eventBus.$emit("showBookmark", bookmark);
+      this.cancel();
     }
   }
 };
